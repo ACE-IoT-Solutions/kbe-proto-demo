@@ -282,6 +282,13 @@
 
                     <div id="preCoolingForm" style="display: none;">
                         <div class="form-group">
+                            <label>Select Zones for Pre-Cooling</label>
+                            <div id="preCoolingZoneCheckboxes" style="display: grid; gap: 8px; margin-top: 8px;">
+                                <!-- Will be populated dynamically -->
+                            </div>
+                            <small style="color: #666;">Select zones to pre-cool (Facility Mgr: max 3 zones)</small>
+                        </div>
+                        <div class="form-group">
                             <label>Target Temperature (°F)</label>
                             <input type="number" id="targetTemp" min="60" max="75" step="0.5" value="65">
                             <small style="color: #666;">Range: 60-75°F for pre-cooling comfort</small>
@@ -302,6 +309,11 @@
                             <small style="color: #666;">1-10°F/hr cooling rate limit</small>
                         </div>
                         <div class="form-group">
+                            <label>Electricity Rate ($/kWh)</label>
+                            <input type="number" id="electricityRate" min="0.01" max="1.0" step="0.01" value="0.12">
+                            <small style="color: #666;">Cost per kilowatt-hour for cost estimation</small>
+                        </div>
+                        <div class="form-group">
                             <label style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="adaptiveLearning" checked style="width: auto;">
                                 Enable Adaptive Learning
@@ -311,6 +323,9 @@
                         <div class="form-group">
                             <label>Reason</label>
                             <input type="text" id="preCoolingReason" placeholder="e.g., Peak demand reduction">
+                        </div>
+                        <div id="preCoolingCostEstimate" style="background: #f0f2ff; padding: 12px; border-radius: 6px; margin-top: 10px; display: none;">
+                            <strong>Estimated Cost:</strong> <span id="estimatedCost">$0.00</span>
                         </div>
                     </div>
 
@@ -351,6 +366,12 @@
             document.getElementById('actionType').addEventListener('change', handleActionTypeChange);
             document.getElementById('executeBtn').addEventListener('click', executeAction);
             document.getElementById('zoneSelector').addEventListener('change', handleZoneSelectorChange);
+
+            // Add event listeners for pre-cooling cost estimation
+            document.getElementById('targetTemp').addEventListener('input', updatePreCoolingCostEstimate);
+            document.getElementById('startTime').addEventListener('input', updatePreCoolingCostEstimate);
+            document.getElementById('occupancyStart').addEventListener('input', updatePreCoolingCostEstimate);
+            document.getElementById('electricityRate').addEventListener('input', updatePreCoolingCostEstimate);
         }
 
         function handleZoneSelectorChange(e) {
@@ -435,7 +456,59 @@
                 adjustForm.style.display = 'none';
                 shedForm.style.display = 'none';
                 preCoolingForm.style.display = 'block';
+                renderPreCoolingZoneCheckboxes();
             }
+        }
+
+        function renderPreCoolingZoneCheckboxes() {
+            const container = document.getElementById('preCoolingZoneCheckboxes');
+            container.innerHTML = zones.map(zone => `
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox"
+                           class="preCooling-zone-checkbox"
+                           value="${zone.id}"
+                           onchange="updatePreCoolingCostEstimate()"
+                           style="width: auto;">
+                    <span>${zone.id} - ${zone.name} (Current: ${zone.temp.toFixed(1)}°F, Setpoint: ${zone.setpoint.toFixed(1)}°F)</span>
+                </label>
+            `).join('');
+        }
+
+        function updatePreCoolingCostEstimate() {
+            const selectedZones = Array.from(document.querySelectorAll('.preCooling-zone-checkbox:checked'));
+            const targetTemp = parseFloat(document.getElementById('targetTemp').value) || 65;
+            const startTime = document.getElementById('startTime').value;
+            const occupancyStart = document.getElementById('occupancyStart').value;
+            const electricityRate = parseFloat(document.getElementById('electricityRate').value) || 0.12;
+
+            if (selectedZones.length === 0 || !startTime || !occupancyStart) {
+                document.getElementById('preCoolingCostEstimate').style.display = 'none';
+                return;
+            }
+
+            // Calculate time window in hours
+            const [startHour, startMin] = startTime.split(':').map(Number);
+            const [occHour, occMin] = occupancyStart.split(':').map(Number);
+            let startMinutes = startHour * 60 + startMin;
+            let occMinutes = occHour * 60 + occMin;
+            if (occMinutes < startMinutes) occMinutes += 24 * 60;
+            const durationHours = (occMinutes - startMinutes) / 60;
+
+            // Calculate average temperature delta across selected zones
+            let totalDelta = 0;
+            selectedZones.forEach(checkbox => {
+                const zone = zones.find(z => z.id === checkbox.value);
+                if (zone) {
+                    totalDelta += Math.abs(zone.temp - targetTemp);
+                }
+            });
+            const avgDelta = totalDelta / selectedZones.length;
+
+            // Cost formula: zones * avgTempDelta * durationHours * 3kW * electricityRate
+            const estimatedCost = selectedZones.length * avgDelta * durationHours * 3.0 * electricityRate;
+
+            document.getElementById('estimatedCost').textContent = `$${estimatedCost.toFixed(2)}`;
+            document.getElementById('preCoolingCostEstimate').style.display = 'block';
         }
 
         async function executeAction() {
@@ -732,9 +805,24 @@
                     const occupancyStart = document.getElementById('occupancyStart').value;
                     const maxCoolingRate = parseFloat(document.getElementById('maxCoolingRate').value);
                     const adaptiveLearning = document.getElementById('adaptiveLearning').checked;
+                    const electricityRate = parseFloat(document.getElementById('electricityRate').value) || 0.12;
+
+                    // Get selected zones from checkboxes
+                    const selectedZoneCheckboxes = Array.from(document.querySelectorAll('.preCooling-zone-checkbox:checked'));
+                    const selectedZoneIds = selectedZoneCheckboxes.map(cb => cb.value);
+                    const selectedZones = zones.filter(z => selectedZoneIds.includes(z.id));
 
                     // Collect all validation violations for pre-cooling
                     const preCoolingViolations = [];
+
+                    // SHACL Validation: At least one zone must be selected
+                    if (selectedZones.length === 0) {
+                        preCoolingViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Zone selection: At least one zone required',
+                            violation: 'No zones selected for pre-cooling'
+                        });
+                    }
 
                     // SHACL Validation: Target temperature range
                     if (isNaN(targetTemp) || targetTemp < 60 || targetTemp > 75) {
@@ -763,12 +851,15 @@
                     }
 
                     // SHACL Validation: Time window validation (30 min - 8 hours)
+                    let durationHours = 0;
                     if (timeRegex.test(startTime) && timeRegex.test(occupancyStart)) {
                         const [startHr, startMin] = startTime.split(':').map(Number);
                         const [occHr, occMin] = occupancyStart.split(':').map(Number);
-                        const startMinutes = startHr * 60 + startMin;
-                        const occMinutes = occHr * 60 + occMin;
+                        let startMinutes = startHr * 60 + startMin;
+                        let occMinutes = occHr * 60 + occMin;
+                        if (occMinutes < startMinutes) occMinutes += 24 * 60;
                         const windowMinutes = occMinutes - startMinutes;
+                        durationHours = windowMinutes / 60;
 
                         if (windowMinutes < 30) {
                             preCoolingViolations.push({
@@ -795,6 +886,14 @@
                         });
                     }
 
+                    // Calculate dynamic cost based on selected zones
+                    let totalDelta = 0;
+                    selectedZones.forEach(zone => {
+                        totalDelta += Math.abs(zone.temp - targetTemp);
+                    });
+                    const avgDelta = selectedZones.length > 0 ? totalDelta / selectedZones.length : 0;
+                    const estimatedCost = selectedZones.length * avgDelta * durationHours * 3.0 * electricityRate;
+
                     // ODRL Governance: Operators cannot execute pre-cooling
                     if (userId === 'operator') {
                         preCoolingViolations.push({
@@ -805,15 +904,12 @@
                     }
 
                     // ODRL Governance: Facility managers limited to 3 zones and $50 cost
-                    const applicableZones = zones.filter(z => z.occupancy === 'occupied');
-                    const estimatedCost = applicableZones.length * 18.50; // Estimated cost per zone
-
                     if (userId === 'facility_manager') {
-                        if (applicableZones.length > 3) {
+                        if (selectedZones.length > 3) {
                             preCoolingViolations.push({
                                 type: 'ODRL Policy',
                                 rule: 'Facility Managers: Max 3 zones for pre-cooling',
-                                violation: `Attempting pre-cooling on ${applicableZones.length} zones (limit: 3)`
+                                violation: `Attempting pre-cooling on ${selectedZones.length} zones (limit: 3)`
                             });
                         }
                         if (estimatedCost > 50) {
@@ -874,7 +970,7 @@
                             actionDefinition: failedPreCoolingDefinition,
                             status: 'failed',
                             action_type: 'preCooling',
-                            zone_id: applicableZones.map(z => z.id).join(', '),
+                            zone_id: selectedZones.map(z => z.id).join(', '),
                             timestamp: new Date().toISOString(),
                             user: {
                                 id: userId,
@@ -886,7 +982,8 @@
                                 occupancy_start: occupancyStart,
                                 max_cooling_rate: maxCoolingRate,
                                 adaptive_learning: adaptiveLearning,
-                                zones: applicableZones.map(z => z.id),
+                                electricity_rate: electricityRate,
+                                zones: selectedZones.map(z => z.id),
                                 estimated_cost: estimatedCost.toFixed(2),
                                 reason: document.getElementById('preCoolingReason').value || 'Peak demand optimization'
                             },
@@ -939,7 +1036,8 @@
                             occupancy_start: occupancyStart,
                             max_cooling_rate: maxCoolingRate,
                             adaptive_learning: adaptiveLearning,
-                            zones: applicableZones.map(z => z.id),
+                            electricity_rate: electricityRate,
+                            zones: selectedZones.map(z => z.id),
                             estimated_cost: estimatedCost.toFixed(2),
                             reason: document.getElementById('preCoolingReason').value || 'Peak demand optimization'
                         },
