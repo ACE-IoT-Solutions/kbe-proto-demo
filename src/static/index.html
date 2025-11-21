@@ -594,7 +594,7 @@
                             role: roleName
                         }
                     };
-                } else {
+                } else if (actionType === 'loadShed') {
                     const shedLevel = parseInt(document.getElementById('shedLevel').value);
                     const duration = parseInt(document.getElementById('duration').value);
 
