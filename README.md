@@ -68,7 +68,7 @@ uv run uvicorn src.main:app --reload --port 8008
 **Available Actions:**
 - **Adjust Temperature Setpoint** - Modify zone setpoints with validation
 - **Load Shed** - Demand management through lighting reduction
-- **Pre-Cooling** (Future) - Optimize cooling schedules
+- **Pre-Cooling** - Optimize peak demand costs through strategic pre-cooling
 
 **Action Properties:**
 - SHACL-style validation rules (60-80F range, max 15F delta)
@@ -79,17 +79,15 @@ uv run uvicorn src.main:app --reload --port 8008
 ### 3. Validation & Security
 
 **SHACL Constraints:**
-- Setpoint range: 60-80F (comfort zone)
-- Maximum change: 15F for all users
-- Operator limit: 5F delta
-- Shed level: 1-5
-- Duration: Max 240 minutes
+- **Adjust Setpoint**: 60-80F range, max 15F delta, operator 5F limit
+- **Load Shed**: Levels 1-5, max 240 min duration, level 4-5 max 120 min
+- **Pre-Cooling**: 60-75F target, 30 min - 8 hour window, max 10F/hr cooling rate
 
 **ODRL Policies:**
-- **Operator**: Basic controls, 5F limit
-- **Facility Manager**: Full access
-- **Energy Manager**: Optimization + high shed levels (4-5)
-- **Contractor**: Limited access, no emergency actions
+- **Operator**: Basic setpoint controls (5F limit), no load shed or pre-cooling
+- **Facility Manager**: Full setpoint access, shed levels 1-3, pre-cooling (3 zones max, $50 cost limit)
+- **Energy Manager**: Full access to all actions including high shed levels (4-5) and unrestricted pre-cooling
+- **Contractor**: Limited setpoint access, no emergency actions, no optimization features
 
 **Security Features:**
 - Failed action logging for security monitoring
@@ -253,6 +251,22 @@ tests/
 3. Set duration (max 240 min)
 4. Energy Manager can execute level 4-5
 5. Other roles limited to level 1-3
+
+### Scenario 3: Pre-Cooling Optimization
+
+1. Switch to "Pre-Cooling" action
+2. Set target temperature (60-75F)
+3. Configure start time (e.g., 05:00) and occupancy time (e.g., 08:00)
+4. Adjust max cooling rate (1-10F/hr)
+5. Energy Manager has full access
+6. Facility Manager limited to 3 zones and $50 cost
+7. Operators and Contractors denied access
+
+**Try these violations:**
+- Operator trying to execute (denied - requires optimization expertise)
+- Facility Manager with 4+ zones (denied - 3 zone limit)
+- Target temp below 62F (denied - too aggressive for economics)
+- Time window less than 30 min (denied - insufficient pre-cooling time)
 
 ## Docker Details
 

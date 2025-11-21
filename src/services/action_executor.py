@@ -155,6 +155,7 @@ class ActionExecutor:
             "adjustVentilation": self._handle_adjust_ventilation,
             "enableEconomizer": self._handle_enable_economizer,
             "setLightingLevel": self._handle_set_lighting_level,
+            "preCooling": self._handle_pre_cooling,
         }
 
         handler = action_handlers.get(request.action_type)
@@ -277,6 +278,52 @@ class ActionExecutor:
             "action": "setLightingLevel",
             "zone": request.target_zone,
             "level": level,
+            "applied_at": datetime.utcnow().isoformat()
+        }
+
+    async def _handle_pre_cooling(
+        self,
+        request: ActionRequest,
+        action_id: str
+    ) -> Dict[str, Any]:
+        """
+        Handle pre-cooling optimization action.
+
+        Pre-cools zones during off-peak hours to reduce peak demand costs.
+        """
+        target_temp = request.parameters.get("target_temp")
+        start_time = request.parameters.get("start_time")
+        occupancy_start = request.parameters.get("occupancy_start")
+        max_rate_delta = request.parameters.get("max_rate_delta", 5.0)
+        enable_adaptive = request.parameters.get("enable_adaptive", True)
+
+        logger.info(
+            f"Initiating pre-cooling for zone {request.target_zone}: "
+            f"target={target_temp}°F, start={start_time}, occupancy={occupancy_start}"
+        )
+
+        # Simulate async scheduling operation
+        await asyncio.sleep(0.15)
+
+        # Calculate estimated time window
+        from datetime import datetime as dt
+        start_dt = dt.strptime(start_time, "%H:%M")
+        occ_dt = dt.strptime(occupancy_start, "%H:%M")
+        time_window_minutes = (occ_dt.hour * 60 + occ_dt.minute) - (start_dt.hour * 60 + start_dt.minute)
+        if time_window_minutes < 0:
+            time_window_minutes += 24 * 60
+
+        return {
+            "action": "preCooling",
+            "zone": request.target_zone,
+            "target_temp": target_temp,
+            "start_time": start_time,
+            "occupancy_start": occupancy_start,
+            "time_window_minutes": time_window_minutes,
+            "max_cooling_rate": max_rate_delta,
+            "adaptive_enabled": enable_adaptive,
+            "schedule_created": True,
+            "estimated_cost_usd": request.parameters.get("estimated_cost", 0.0),
             "applied_at": datetime.utcnow().isoformat()
         }
 

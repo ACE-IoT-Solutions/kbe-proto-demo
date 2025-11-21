@@ -225,6 +225,7 @@
                         <select id="actionType">
                             <option value="adjustSetpoint">Adjust Temperature Setpoint</option>
                             <option value="loadShed">Load Shed - Reduce Lighting</option>
+                            <option value="preCooling">Pre-Cooling - Optimize Peak Demand</option>
                         </select>
                     </div>
 
@@ -276,6 +277,40 @@
                         <div class="form-group">
                             <label>Duration (minutes)</label>
                             <input type="number" id="duration" min="1" max="240" value="30">
+                        </div>
+                    </div>
+
+                    <div id="preCoolingForm" style="display: none;">
+                        <div class="form-group">
+                            <label>Target Temperature (°F)</label>
+                            <input type="number" id="targetTemp" min="60" max="75" step="0.5" value="65">
+                            <small style="color: #666;">Range: 60-75°F for pre-cooling comfort</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Start Time (HH:MM, 24-hour)</label>
+                            <input type="text" id="startTime" placeholder="05:00" value="05:00" pattern="^([01]\d|2[0-3]):([0-5]\d)$">
+                            <small style="color: #666;">When to begin pre-cooling</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Occupancy Start (HH:MM, 24-hour)</label>
+                            <input type="text" id="occupancyStart" placeholder="08:00" value="08:00" pattern="^([01]\d|2[0-3]):([0-5]\d)$">
+                            <small style="color: #666;">When occupants arrive</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Max Cooling Rate (°F/hr)</label>
+                            <input type="number" id="maxCoolingRate" min="1" max="10" step="0.5" value="5.0">
+                            <small style="color: #666;">1-10°F/hr cooling rate limit</small>
+                        </div>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="adaptiveLearning" checked style="width: auto;">
+                                Enable Adaptive Learning
+                            </label>
+                            <small style="color: #666;">Learn from historical patterns to optimize</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Reason</label>
+                            <input type="text" id="preCoolingReason" placeholder="e.g., Peak demand reduction">
                         </div>
                     </div>
 
@@ -386,13 +421,20 @@
         function handleActionTypeChange(e) {
             const adjustForm = document.getElementById('adjustSetpointForm');
             const shedForm = document.getElementById('loadShedForm');
+            const preCoolingForm = document.getElementById('preCoolingForm');
 
             if (e.target.value === 'adjustSetpoint') {
                 adjustForm.style.display = 'block';
                 shedForm.style.display = 'none';
-            } else {
+                preCoolingForm.style.display = 'none';
+            } else if (e.target.value === 'loadShed') {
                 adjustForm.style.display = 'none';
                 shedForm.style.display = 'block';
+                preCoolingForm.style.display = 'none';
+            } else if (e.target.value === 'preCooling') {
+                adjustForm.style.display = 'none';
+                shedForm.style.display = 'none';
+                preCoolingForm.style.display = 'block';
             }
         }
 
@@ -677,6 +719,229 @@
                             shed_level: shedLevel,
                             duration: parseInt(document.getElementById('duration').value),
                             zones: zones.filter(z => z.occupancy === 'occupied').map(z => z.id)
+                        },
+                        user: {
+                            id: userId,
+                            role: roleName
+                        }
+                    };
+                } else if (actionType === 'preCooling') {
+                    // Pre-cooling action validation and execution
+                    const targetTemp = parseFloat(document.getElementById('targetTemp').value);
+                    const startTime = document.getElementById('startTime').value;
+                    const occupancyStart = document.getElementById('occupancyStart').value;
+                    const maxCoolingRate = parseFloat(document.getElementById('maxCoolingRate').value);
+                    const adaptiveLearning = document.getElementById('adaptiveLearning').checked;
+
+                    // Collect all validation violations for pre-cooling
+                    const preCoolingViolations = [];
+
+                    // SHACL Validation: Target temperature range
+                    if (isNaN(targetTemp) || targetTemp < 60 || targetTemp > 75) {
+                        preCoolingViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Target temperature: 60-75°F',
+                            violation: `Attempted target temperature ${targetTemp}°F is outside allowed range`
+                        });
+                    }
+
+                    // SHACL Validation: Time format validation
+                    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+                    if (!timeRegex.test(startTime)) {
+                        preCoolingViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Time format: HH:MM (24-hour)',
+                            violation: `Start time '${startTime}' is not in valid HH:MM format`
+                        });
+                    }
+                    if (!timeRegex.test(occupancyStart)) {
+                        preCoolingViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Time format: HH:MM (24-hour)',
+                            violation: `Occupancy start '${occupancyStart}' is not in valid HH:MM format`
+                        });
+                    }
+
+                    // SHACL Validation: Time window validation (30 min - 8 hours)
+                    if (timeRegex.test(startTime) && timeRegex.test(occupancyStart)) {
+                        const [startHr, startMin] = startTime.split(':').map(Number);
+                        const [occHr, occMin] = occupancyStart.split(':').map(Number);
+                        const startMinutes = startHr * 60 + startMin;
+                        const occMinutes = occHr * 60 + occMin;
+                        const windowMinutes = occMinutes - startMinutes;
+
+                        if (windowMinutes < 30) {
+                            preCoolingViolations.push({
+                                type: 'SHACL Constraint',
+                                rule: 'Time window: Minimum 30 minutes',
+                                violation: `Pre-cooling window of ${windowMinutes} minutes is below minimum (30 min)`
+                            });
+                        }
+                        if (windowMinutes > 480) { // 8 hours
+                            preCoolingViolations.push({
+                                type: 'SHACL Constraint',
+                                rule: 'Time window: Maximum 8 hours',
+                                violation: `Pre-cooling window of ${(windowMinutes/60).toFixed(1)} hours exceeds maximum (8 hrs)`
+                            });
+                        }
+                    }
+
+                    // SHACL Validation: Max cooling rate
+                    if (isNaN(maxCoolingRate) || maxCoolingRate < 1 || maxCoolingRate > 10) {
+                        preCoolingViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Max cooling rate: 1-10°F/hr',
+                            violation: `Attempted cooling rate ${maxCoolingRate}°F/hr is outside allowed range`
+                        });
+                    }
+
+                    // ODRL Governance: Operators cannot execute pre-cooling
+                    if (userId === 'operator') {
+                        preCoolingViolations.push({
+                            type: 'ODRL Policy',
+                            rule: 'Operators cannot execute pre-cooling actions',
+                            violation: `User role '${roleName}' lacks permission for pre-cooling operations`
+                        });
+                    }
+
+                    // ODRL Governance: Facility managers limited to 3 zones and $50 cost
+                    const applicableZones = zones.filter(z => z.occupancy === 'occupied');
+                    const estimatedCost = applicableZones.length * 18.50; // Estimated cost per zone
+
+                    if (userId === 'facility_manager') {
+                        if (applicableZones.length > 3) {
+                            preCoolingViolations.push({
+                                type: 'ODRL Policy',
+                                rule: 'Facility Managers: Max 3 zones for pre-cooling',
+                                violation: `Attempting pre-cooling on ${applicableZones.length} zones (limit: 3)`
+                            });
+                        }
+                        if (estimatedCost > 50) {
+                            preCoolingViolations.push({
+                                type: 'ODRL Policy',
+                                rule: 'Facility Managers: Max $50 cost per pre-cooling',
+                                violation: `Estimated cost $${estimatedCost.toFixed(2)} exceeds limit ($50.00)`
+                            });
+                        }
+                    }
+
+                    // ODRL Governance: Contractors cannot execute pre-cooling
+                    if (userId === 'contractor') {
+                        preCoolingViolations.push({
+                            type: 'ODRL Policy',
+                            rule: 'Contractors cannot execute pre-cooling actions',
+                            violation: `User role '${roleName}' lacks permission for pre-cooling operations`
+                        });
+                    }
+
+                    // If violations exist, report and log
+                    if (preCoolingViolations.length > 0) {
+                        let errorMsg = `❌ Action Validation Failed (${preCoolingViolations.length} violation${preCoolingViolations.length > 1 ? 's' : ''}):\n\n`;
+                        preCoolingViolations.forEach((v, idx) => {
+                            errorMsg += `${idx + 1}. [${v.type}] ${v.rule}\n   → ${v.violation}\n\n`;
+                        });
+                        showAlert(errorMsg, 'error');
+
+                        // Log failed pre-cooling action
+                        const failedPreCoolingDefinition = {
+                            id: `def-pre-cooling`,
+                            name: 'Pre-Cooling - Optimize Peak Demand',
+                            description: 'Pre-cool building before occupancy to reduce peak demand',
+                            targetType: 'brick:HVAC_System',
+                            inputSchema: {
+                                target_temp: 'number (60-75°F)',
+                                start_time: 'string (HH:MM)',
+                                occupancy_start: 'string (HH:MM)',
+                                max_cooling_rate: 'number (1-10°F/hr)',
+                                adaptive_learning: 'boolean',
+                                zones: 'array[zone_id]'
+                            },
+                            validationRules: [
+                                'Target temperature: 60-75°F',
+                                'Time window: 30 minutes to 8 hours',
+                                'Max cooling rate: 1-10°F/hr',
+                                'Operators: Cannot execute (no permission)',
+                                'Facility Managers: Max 3 zones, $50 cost limit',
+                                'Energy Managers: Full access',
+                                'Contractors: Cannot execute (no permission)'
+                            ],
+                            requiredPermissions: ['zone:write', 'hvac:control', 'demand:optimize', 'pre-cooling:execute'],
+                            sideEffects: ['power:consumption_increase', 'peak:demand_reduction', 'cost:savings', 'comfort:optimization']
+                        };
+
+                        const failedPreCoolingExecution = {
+                            id: `exec-${Date.now()}`,
+                            actionDefinition: failedPreCoolingDefinition,
+                            status: 'failed',
+                            action_type: 'preCooling',
+                            zone_id: applicableZones.map(z => z.id).join(', '),
+                            timestamp: new Date().toISOString(),
+                            user: {
+                                id: userId,
+                                role: roleName
+                            },
+                            parameters: {
+                                target_temp: targetTemp,
+                                start_time: startTime,
+                                occupancy_start: occupancyStart,
+                                max_cooling_rate: maxCoolingRate,
+                                adaptive_learning: adaptiveLearning,
+                                zones: applicableZones.map(z => z.id),
+                                estimated_cost: estimatedCost.toFixed(2),
+                                reason: document.getElementById('preCoolingReason').value || 'Peak demand optimization'
+                            },
+                            validationResults: {
+                                passed: false,
+                                rules_checked: failedPreCoolingDefinition.validationRules.length,
+                                permissions_verified: false,
+                                violations: preCoolingViolations
+                            },
+                            result: 'validation_failed',
+                            failureReason: preCoolingViolations.map(v => `[${v.type}] ${v.violation}`).join('; ')
+                        };
+
+                        addAuditEntry(failedPreCoolingExecution);
+                        return;
+                    }
+
+                    // Create successful pre-cooling action
+                    actionDefinition = {
+                        id: `def-pre-cooling`,
+                        name: 'Pre-Cooling - Optimize Peak Demand',
+                        description: 'Pre-cool building before occupancy to reduce peak demand',
+                        targetType: 'brick:HVAC_System',
+                        inputSchema: {
+                            target_temp: 'number (60-75°F)',
+                            start_time: 'string (HH:MM)',
+                            occupancy_start: 'string (HH:MM)',
+                            max_cooling_rate: 'number (1-10°F/hr)',
+                            adaptive_learning: 'boolean',
+                            zones: 'array[zone_id]'
+                        },
+                        validationRules: [
+                            'Target temperature: 60-75°F',
+                            'Time window: 30 minutes to 8 hours',
+                            'Max cooling rate: 1-10°F/hr',
+                            'Operators: Cannot execute (no permission)',
+                            'Facility Managers: Max 3 zones, $50 cost limit',
+                            'Energy Managers: Full access',
+                            'Contractors: Cannot execute (no permission)'
+                        ],
+                        requiredPermissions: ['zone:write', 'hvac:control', 'demand:optimize', 'pre-cooling:execute'],
+                        sideEffects: ['power:consumption_increase', 'peak:demand_reduction', 'cost:savings', 'comfort:optimization']
+                    };
+
+                    action = {
+                        action_type: 'preCooling',
+                        parameters: {
+                            target_temp: targetTemp,
+                            start_time: startTime,
+                            occupancy_start: occupancyStart,
+                            max_cooling_rate: maxCoolingRate,
+                            adaptive_learning: adaptiveLearning,
+                            zones: applicableZones.map(z => z.id),
+                            estimated_cost: estimatedCost.toFixed(2),
+                            reason: document.getElementById('preCoolingReason').value || 'Peak demand optimization'
                         },
                         user: {
                             id: userId,
