@@ -1126,15 +1126,24 @@
             const actionDef = entry.actionDefinition || {};
             const validation = entry.validationResults || {};
             const user = entry.user || {};
+            const params = entry.parameters || {};
+
+            // Format zone display for pre-cooling (show zone count and details)
+            let zoneDisplay = entry.zone_id;
+            if (entry.action_type === 'preCooling' && params.zones) {
+                const zoneCount = Array.isArray(params.zones) ? params.zones.length : 0;
+                zoneDisplay = `${zoneCount} zone${zoneCount !== 1 ? 's' : ''} (${Array.isArray(params.zones) ? params.zones.join(', ') : params.zones})`;
+            }
 
             const entryHtml = `
                 <div class="audit-entry ${entry.status}" style="cursor: pointer;" onclick="toggleAuditDetails('${entry.id}')">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div>
                             <div class="time">${time}</div>
-                            <div class="action"><strong>${actionDef.name || entry.action_type}</strong> - Zone ${entry.zone_id}</div>
+                            <div class="action"><strong>${actionDef.name || entry.action_type}</strong> - ${zoneDisplay}</div>
                             <div style="font-size: 12px; color: #666; margin-top: 4px;">
                                 User: ${user.role || 'Unknown'} | ID: ${entry.id}
+                                ${entry.action_type === 'preCooling' && params.estimated_cost ? ` | Est. Cost: $${params.estimated_cost}` : ''}
                             </div>
                         </div>
                         <span class="status-badge ${entry.status}">${entry.status.toUpperCase()}</span>
@@ -1178,7 +1187,20 @@
 
                             <strong style="margin-top: 8px; display: block;">📊 Parameters:</strong>
                             <div style="margin-left: 20px; margin-top: 4px;">
-                                <pre style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-size: 11px;">${JSON.stringify(entry.parameters || {}, null, 2)}</pre>
+                                ${entry.action_type === 'preCooling' ? `
+                                    <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-size: 12px;">
+                                        <div><strong>🌡️ Target Temperature:</strong> ${params.target_temp}°F</div>
+                                        <div><strong>⏰ Start Time:</strong> ${params.start_time} → <strong>Occupancy:</strong> ${params.occupancy_start}</div>
+                                        <div><strong>📉 Max Cooling Rate:</strong> ${params.max_cooling_rate || 'N/A'}°F/hr</div>
+                                        <div><strong>⚡ Electricity Rate:</strong> $${params.electricity_rate || 'N/A'}/kWh</div>
+                                        <div><strong>💰 Estimated Cost:</strong> $${params.estimated_cost}</div>
+                                        <div><strong>🧠 Adaptive Learning:</strong> ${params.adaptive_learning ? 'Enabled' : 'Disabled'}</div>
+                                        <div><strong>🏢 Zones (${params.zones ? params.zones.length : 0}):</strong> ${params.zones ? params.zones.join(', ') : 'N/A'}</div>
+                                        <div style="margin-top: 6px;"><strong>💬 Reason:</strong> ${params.reason || 'N/A'}</div>
+                                    </div>
+                                ` : `
+                                    <pre style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-size: 11px;">${JSON.stringify(entry.parameters || {}, null, 2)}</pre>
+                                `}
                             </div>
                         </div>
                     </div>
