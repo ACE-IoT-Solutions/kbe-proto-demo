@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KBE Ontology Graph - Knowledge Graph Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        header {
+            background: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        header h1 { font-size: 32px; margin-bottom: 10px; }
+        header p { opacity: 0.9; }
+        .controls {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .controls label {
+            font-weight: 600;
+            color: #333;
+        }
+        .controls select, .controls button {
+            padding: 8px 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .controls button {
+            background: #4e54c8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .controls button:hover {
+            background: #3d42a0;
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            height: calc(100vh - 220px);
+        }
+        #graph-container {
+            position: relative;
+            background: #fafbfc;
+            border-right: 1px solid #e0e0e0;
+        }
+        #graph-svg {
+            width: 100%;
+            height: 100%;
+        }
+        .sidebar {
+            padding: 20px;
+            overflow-y: auto;
+            background: white;
+        }
+        .sidebar h2 {
+            color: #4e54c8;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid #4e54c8;
+            padding-bottom: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            margin-right: 10px;
+            border: 2px solid #333;
+        }
+        .legend-label {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+        }
+        .info-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 8px;
+            border-left: 4px solid #4e54c8;
+        }
+        .info-section h3 {
+            color: #4e54c8;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .info-section p {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #555;
+            margin-bottom: 8px;
+        }
+        .info-section .property {
+            font-size: 12px;
+            padding: 4px 8px;
+            background: white;
+            border-radius: 3px;
+            margin: 4px 0;
+            border-left: 3px solid #4e54c8;
+        }
+        .stats {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff5e6;
+            border-radius: 8px;
+        }
+        .stats h3 {
+            color: #d97706;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin: 5px 0;
+        }
+        .stat-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        /* Graph element styles */
+        .node {
+            cursor: pointer;
+            stroke: #fff;
+            stroke-width: 2px;
+        }
+        .node:hover {
+            stroke: #4e54c8;
+            stroke-width: 3px;
+        }
+        .node.selected {
+            stroke: #ff6b6b;
+            stroke-width: 4px;
+        }
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+            fill: none;
+        }
+        .link-label {
+            font-size: 10px;
+            fill: #666;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .link-label.hidden {
+            display: none;
+        }
+        .node-label {
+            font-size: 12px;
+            font-weight: 600;
+            pointer-events: none;
+            text-anchor: middle;
+            fill: #333;
+        }
+        .node-label tspan {
+            paint-order: stroke;
+            stroke: rgba(255, 255, 255, 0.8);
+            stroke-width: 2px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .node-sublabel {
+            font-size: 9px;
+            pointer-events: none;
+            text-anchor: middle;
+            fill: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🕸️ KBE Ontology Knowledge Graph</h1>
+            <p>Interactive visualization of Kinetic Building Extension classes, properties, and actions</p>
+        </header>
+
+        <div class="controls">
+            <label for="layoutSelect">Layout:</label>
+            <select id="layoutSelect">
+                <option value="force">Force-Directed</option>
+                <option value="hierarchical">Hierarchical</option>
+                <option value="radial">Radial</option>
+            </select>
+
+            <label for="filterSelect">Show:</label>
+            <select id="filterSelect">
+                <option value="all">All Nodes</option>
+                <option value="classes">Classes Only</option>
+                <option value="actions">Actions Only</option>
+                <option value="properties">Properties Only</option>
+            </select>
+
+            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                <input type="checkbox" id="showLinkLabels" checked onchange="toggleLinkLabels()">
+                <span>Show Link Labels</span>
+            </label>
+
+            <button onclick="resetZoom()">Reset View</button>
+            <button onclick="exportGraph()">Export SVG</button>
+            <button onclick="window.location.href='/'">← Back to Demo</button>
+        </div>
+
+        <div class="main-content">
+            <div id="graph-container">
+                <svg id="graph-svg"></svg>
+            </div>
+
+            <div class="sidebar">
+                <h2>Legend</h2>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4e54c8;"></div>
+                    <div class="legend-label">Brick Classes</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #28a745;"></div>
+                    <div class="legend-label">KBE Actions</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffc107;"></div>
+                    <div class="legend-label">Properties</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #dc3545;"></div>
+                    <div class="legend-label">Constraints</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #17a2b8;"></div>
+                    <div class="legend-label">Equipment</div>
+                </div>
+
+                <div class="stats">
+                    <h3>Graph Statistics</h3>
+                    <div class="stat-item">
+                        <span>Total Nodes:</span>
+                        <span class="stat-value" id="totalNodes">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Total Relationships:</span>
+                        <span class="stat-value" id="totalLinks">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Classes:</span>
+                        <span class="stat-value" id="classCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Actions:</span>
+                        <span class="stat-value" id="actionCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Properties:</span>
+                        <span class="stat-value" id="propertyCount">0</span>
+                    </div>
+                </div>
+
+                <div class="info-section" id="nodeInfo" style="display: none;">
+                    <h3>Selected Node</h3>
+                    <div id="nodeDetails"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // KBE Ontology Graph Data
+        const graphData = {
+            nodes: [
+                // Brick Schema Classes
+                { id: 'brick:Zone', label: 'Zone', type: 'class', description: 'Physical space in a building', color: '#4e54c8' },
+                { id: 'brick:HVAC_Zone', label: 'HVAC Zone', type: 'class', description: 'Zone with HVAC control', color: '#4e54c8' },
+                { id: 'brick:Temperature_Setpoint', label: 'Temperature\nSetpoint', type: 'class', description: 'Desired temperature setting', color: '#4e54c8' },
+                { id: 'brick:Temperature_Sensor', label: 'Temperature\nSensor', type: 'class', description: 'Measures current temperature', color: '#4e54c8' },
+                { id: 'brick:HVAC_System', label: 'HVAC System', type: 'class', description: 'Heating/cooling equipment', color: '#17a2b8' },
+                { id: 'brick:Lighting_System', label: 'Lighting\nSystem', type: 'class', description: 'Lighting equipment and controls', color: '#17a2b8' },
+                { id: 'brick:Building', label: 'Building', type: 'class', description: 'Top-level building entity', color: '#4e54c8' },
+
+                // KBE Action Definitions
+                { id: 'kbe:AdjustSetpoint', label: 'Adjust\nSetpoint', type: 'action', description: 'Modify zone temperature setpoint with validation', color: '#28a745' },
+                { id: 'kbe:LoadShed', label: 'Load Shed', type: 'action', description: 'Demand management through lighting reduction', color: '#28a745' },
+                { id: 'kbe:PreCooling', label: 'Pre-Cooling', type: 'action', description: 'Optimize cooling schedule for demand response', color: '#28a745' },
+
+                // Properties
+                { id: 'prop:temperature_setpoint', label: 'temperature\n_setpoint', type: 'property', description: 'Current setpoint value (°F)', color: '#ffc107' },
+                { id: 'prop:current_temperature', label: 'current\n_temperature', type: 'property', description: 'Measured temperature (°F)', color: '#ffc107' },
+                { id: 'prop:hvac_mode', label: 'hvac_mode', type: 'property', description: 'auto|heat|cool|off', color: '#ffc107' },
+                { id: 'prop:occupancy_mode', label: 'occupancy\n_mode', type: 'property', description: 'occupied|unoccupied', color: '#ffc107' },
+                { id: 'prop:power_usage', label: 'power_usage', type: 'property', description: 'Current power consumption (kW)', color: '#ffc107' },
+                { id: 'prop:lighting_level', label: 'lighting_level', type: 'property', description: 'Illumination percentage (0-100%)', color: '#ffc107' },
+
+                // Validation Constraints
+                { id: 'constraint:TempRange', label: 'Temp Range\n60-80°F', type: 'constraint', description: 'SHACL constraint for comfort range', color: '#dc3545' },
+                { id: 'constraint:MaxDelta', label: 'Max Delta\n15°F', type: 'constraint', description: 'SHACL constraint for max change', color: '#dc3545' },
+                { id: 'constraint:RoleDelta', label: 'Operator\n5°F Limit', type: 'constraint', description: 'Role-based delta constraint', color: '#dc3545' },
+                { id: 'constraint:ShedLevel', label: 'Shed Level\n1-5', type: 'constraint', description: 'Valid load shed levels', color: '#dc3545' },
+                { id: 'constraint:Duration', label: 'Duration\nMax 240min', type: 'constraint', description: 'Maximum action duration', color: '#dc3545' },
+
+                // ODRL Policies
+                { id: 'odrl:OperatorPolicy', label: 'Operator\nPolicy', type: 'policy', description: 'Basic controls with 5°F limit', color: '#6f42c1' },
+                { id: 'odrl:EnergyManagerPolicy', label: 'Energy Mgr\nPolicy', type: 'policy', description: 'Full access + high shed levels', color: '#6f42c1' },
+                { id: 'odrl:ContractorPolicy', label: 'Contractor\nPolicy', type: 'policy', description: 'Limited access, no emergency', color: '#6f42c1' },
+
+                // User Roles
+                { id: 'role:Operator', label: 'Operator', type: 'role', description: 'Basic building operations', color: '#fd7e14' },
+                { id: 'role:FacilityManager', label: 'Facility\nManager', type: 'role', description: 'Full building control', color: '#fd7e14' },
+                { id: 'role:EnergyManager', label: 'Energy\nManager', type: 'role', description: 'Optimization and demand response', color: '#fd7e14' },
+                { id: 'role:Contractor', label: 'Contractor', type: 'role', description: 'Limited maintenance access', color: '#fd7e14' }
+            ],
+            links: [
+                // Class relationships (Brick ontology)
+                { source: 'brick:Building', target: 'brick:Zone', label: 'hasPart', type: 'composition' },
+                { source: 'brick:Zone', target: 'brick:HVAC_Zone', label: 'subClassOf', type: 'inheritance' },
+                { source: 'brick:HVAC_Zone', target: 'brick:Temperature_Setpoint', label: 'hasPoint', type: 'association' },
+                { source: 'brick:HVAC_Zone', target: 'brick:Temperature_Sensor', label: 'hasPoint', type: 'association' },
+                { source: 'brick:HVAC_Zone', target: 'brick:HVAC_System', label: 'hasEquipment', type: 'association' },
+                { source: 'brick:Zone', target: 'brick:Lighting_System', label: 'hasEquipment', type: 'association' },
+
+                // Properties to classes
+                { source: 'brick:HVAC_Zone', target: 'prop:temperature_setpoint', label: 'hasProperty', type: 'property' },
+                { source: 'brick:HVAC_Zone', target: 'prop:current_temperature', label: 'hasProperty', type: 'property' },
+                { source: 'brick:HVAC_Zone', target: 'prop:hvac_mode', label: 'hasProperty', type: 'property' },
+                { source: 'brick:HVAC_Zone', target: 'prop:occupancy_mode', label: 'hasProperty', type: 'property' },
+                { source: 'brick:HVAC_Zone', target: 'prop:power_usage', label: 'hasProperty', type: 'property' },
+                { source: 'brick:Lighting_System', target: 'prop:lighting_level', label: 'hasProperty', type: 'property' },
+
+                // Actions to target classes
+                { source: 'kbe:AdjustSetpoint', target: 'brick:Temperature_Setpoint', label: 'targetType', type: 'action-target' },
+                { source: 'kbe:LoadShed', target: 'brick:Lighting_System', label: 'targetType', type: 'action-target' },
+                { source: 'kbe:PreCooling', target: 'brick:HVAC_System', label: 'targetType', type: 'action-target' },
+
+                // Actions to constraints (validation rules)
+                { source: 'kbe:AdjustSetpoint', target: 'constraint:TempRange', label: 'validates', type: 'validation' },
+                { source: 'kbe:AdjustSetpoint', target: 'constraint:MaxDelta', label: 'validates', type: 'validation' },
+                { source: 'kbe:AdjustSetpoint', target: 'constraint:RoleDelta', label: 'validates', type: 'validation' },
+                { source: 'kbe:LoadShed', target: 'constraint:ShedLevel', label: 'validates', type: 'validation' },
+                { source: 'kbe:LoadShed', target: 'constraint:Duration', label: 'validates', type: 'validation' },
+
+                // ODRL policies to actions
+                { source: 'odrl:OperatorPolicy', target: 'kbe:AdjustSetpoint', label: 'permits', type: 'permission' },
+                { source: 'odrl:EnergyManagerPolicy', target: 'kbe:AdjustSetpoint', label: 'permits', type: 'permission' },
+                { source: 'odrl:EnergyManagerPolicy', target: 'kbe:LoadShed', label: 'permits', type: 'permission' },
+                { source: 'odrl:ContractorPolicy', target: 'kbe:AdjustSetpoint', label: 'permits', type: 'permission' },
+
+                // Policies to constraints
+                { source: 'odrl:OperatorPolicy', target: 'constraint:RoleDelta', label: 'enforces', type: 'enforcement' },
+                { source: 'odrl:ContractorPolicy', target: 'constraint:TempRange', label: 'enforces', type: 'enforcement' },
+
+                // Roles to policies
+                { source: 'role:Operator', target: 'odrl:OperatorPolicy', label: 'hasPolicy', type: 'role-policy' },
+                { source: 'role:FacilityManager', target: 'odrl:EnergyManagerPolicy', label: 'hasPolicy', type: 'role-policy' },
+                { source: 'role:EnergyManager', target: 'odrl:EnergyManagerPolicy', label: 'hasPolicy', type: 'role-policy' },
+                { source: 'role:Contractor', target: 'odrl:ContractorPolicy', label: 'hasPolicy', type: 'role-policy' }
+            ]
+        };
+
+        // D3 Force-Directed Graph
+        const width = document.getElementById('graph-container').clientWidth;
+        const height = document.getElementById('graph-container').clientHeight;
+
+        const svg = d3.select('#graph-svg')
+            .attr('width', width)
+            .attr('height', height);
+
+        const g = svg.append('g');
+
+        // Zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => {
+                g.attr('transform', event.transform);
+            });
+
+        svg.call(zoom);
+
+        function resetZoom() {
+            svg.transition().duration(750).call(
+                zoom.transform,
+                d3.zoomIdentity
+            );
+        }
+
+        // Simulation
+        let simulation = d3.forceSimulation(graphData.nodes)
+            .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(200))
+            .force('charge', d3.forceManyBody().strength(-1200))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(d => {
+                // Larger collision radius for nodes to prevent overlap
+                if (d.type === 'action') return 50;
+                if (d.type === 'class') return 45;
+                return 40;
+            }).strength(1))
+            .force('x', d3.forceX(width / 2).strength(0.05))
+            .force('y', d3.forceY(height / 2).strength(0.05));
+
+        // Arrow markers for directed edges
+        svg.append('defs').selectAll('marker')
+            .data(['action-target', 'validation', 'permission', 'enforcement', 'property', 'association', 'composition', 'inheritance', 'role-policy'])
+            .enter().append('marker')
+            .attr('id', d => `arrow-${d}`)
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', 35)
+            .attr('refY', 0)
+            .attr('markerWidth', 6)
+            .attr('markerHeight', 6)
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('d', 'M0,-5L10,0L0,5')
+            .attr('fill', '#999');
+
+        // Links
+        const link = g.append('g')
+            .selectAll('path')
+            .data(graphData.links)
+            .enter().append('path')
+            .attr('class', 'link')
+            .attr('marker-end', d => `url(#arrow-${d.type})`);
+
+        // Link labels
+        const linkLabel = g.append('g')
+            .selectAll('text')
+            .data(graphData.links)
+            .enter().append('text')
+            .attr('class', 'link-label')
+            .text(d => d.label);
+
+        // Nodes
+        const node = g.append('g')
+            .selectAll('circle')
+            .data(graphData.nodes)
+            .enter().append('circle')
+            .attr('class', 'node')
+            .attr('r', d => d.type === 'action' ? 30 : d.type === 'class' ? 25 : 20)
+            .attr('fill', d => d.color)
+            .on('click', selectNode)
+            .call(d3.drag()
+                .on('start', dragstarted)
+                .on('drag', dragged)
+                .on('end', dragended));
+
+        // Node labels - create text elements with proper data binding
+        const nodeLabelGroup = g.append('g').attr('class', 'labels');
+
+        const nodeLabel = nodeLabelGroup.selectAll('text')
+            .data(graphData.nodes)
+            .enter().append('text')
+            .attr('class', 'node-label')
+            .each(function(d) {
+                const lines = d.label.split('\n');
+                const text = d3.select(this);
+                lines.forEach((line, i) => {
+                    text.append('tspan')
+                        .attr('x', 0)
+                        .attr('dy', i === 0 ? '0' : '1.2em')
+                        .text(line);
+                });
+            });
+
+        // Simulation tick
+        simulation.on('tick', () => {
+            link.attr('d', d => {
+                const dx = d.target.x - d.source.x;
+                const dy = d.target.y - d.source.y;
+                const dr = Math.sqrt(dx * dx + dy * dy);
+                return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+            });
+
+            linkLabel
+                .attr('x', d => (d.source.x + d.target.x) / 2)
+                .attr('y', d => (d.source.y + d.target.y) / 2);
+
+            node
+                .attr('cx', d => d.x)
+                .attr('cy', d => d.y);
+
+            nodeLabel
+                .attr('transform', d => `translate(${d.x}, ${d.y + 40})`);
+        });
+
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        // Node selection
+        let selectedNode = null;
+
+        function selectNode(event, d) {
+            // Deselect previous
+            if (selectedNode) {
+                d3.selectAll('.node').classed('selected', false);
+            }
+
+            // Select new
+            selectedNode = d;
+            d3.select(event.currentTarget).classed('selected', true);
+
+            // Show info
+            showNodeInfo(d);
+        }
+
+        function showNodeInfo(node) {
+            const infoDiv = document.getElementById('nodeInfo');
+            const detailsDiv = document.getElementById('nodeDetails');
+
+            // Find connected nodes
+            const outgoing = graphData.links.filter(l => l.source.id === node.id);
+            const incoming = graphData.links.filter(l => l.target.id === node.id);
+
+            let html = `
+                <div class="property"><strong>ID:</strong> ${node.id}</div>
+                <div class="property"><strong>Type:</strong> ${node.type}</div>
+                <div class="property"><strong>Description:</strong> ${node.description}</div>
+            `;
+
+            if (outgoing.length > 0) {
+                html += `<div class="property"><strong>Outgoing (${outgoing.length}):</strong><br>`;
+                outgoing.forEach(link => {
+                    html += `→ ${link.label} → ${link.target.label || link.target.id}<br>`;
+                });
+                html += `</div>`;
+            }
+
+            if (incoming.length > 0) {
+                html += `<div class="property"><strong>Incoming (${incoming.length}):</strong><br>`;
+                incoming.forEach(link => {
+                    html += `← ${link.label} ← ${link.source.label || link.source.id}<br>`;
+                });
+                html += `</div>`;
+            }
+
+            detailsDiv.innerHTML = html;
+            infoDiv.style.display = 'block';
+        }
+
+        // Update statistics
+        function updateStats() {
+            const classes = graphData.nodes.filter(n => n.type === 'class').length;
+            const actions = graphData.nodes.filter(n => n.type === 'action').length;
+            const properties = graphData.nodes.filter(n => n.type === 'property').length;
+
+            document.getElementById('totalNodes').textContent = graphData.nodes.length;
+            document.getElementById('totalLinks').textContent = graphData.links.length;
+            document.getElementById('classCount').textContent = classes;
+            document.getElementById('actionCount').textContent = actions;
+            document.getElementById('propertyCount').textContent = properties;
+        }
+
+        updateStats();
+
+        // Filter functionality
+        document.getElementById('filterSelect').addEventListener('change', function(e) {
+            const filter = e.target.value;
+
+            node.style('opacity', d => {
+                if (filter === 'all') return 1;
+                if (filter === 'classes') return d.type === 'class' ? 1 : 0.1;
+                if (filter === 'actions') return d.type === 'action' ? 1 : 0.1;
+                if (filter === 'properties') return d.type === 'property' ? 1 : 0.1;
+                return 1;
+            });
+
+            nodeLabel.style('opacity', d => {
+                const nodeData = graphData.nodes.find(n => n.id === d.id);
+                if (filter === 'all') return 1;
+                if (filter === 'classes') return nodeData.type === 'class' ? 1 : 0.1;
+                if (filter === 'actions') return nodeData.type === 'action' ? 1 : 0.1;
+                if (filter === 'properties') return nodeData.type === 'property' ? 1 : 0.1;
+                return 1;
+            });
+        });
+
+        // Layout change
+        document.getElementById('layoutSelect').addEventListener('change', function(e) {
+            const layout = e.target.value;
+
+            simulation.stop();
+
+            if (layout === 'hierarchical') {
+                simulation
+                    .force('charge', d3.forceManyBody().strength(-300))
+                    .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(100))
+                    .force('y', d3.forceY(d => {
+                        if (d.type === 'class') return height * 0.3;
+                        if (d.type === 'action') return height * 0.5;
+                        if (d.type === 'property') return height * 0.7;
+                        return height * 0.5;
+                    }).strength(0.5));
+            } else if (layout === 'radial') {
+                const centerNode = graphData.nodes.find(n => n.id === 'brick:Building');
+                simulation
+                    .force('charge', d3.forceManyBody().strength(-500))
+                    .force('r', d3.forceRadial(d => {
+                        if (d.id === centerNode.id) return 0;
+                        if (d.type === 'class') return 200;
+                        if (d.type === 'action') return 350;
+                        return 500;
+                    }, width / 2, height / 2).strength(0.8));
+            } else {
+                simulation
+                    .force('charge', d3.forceManyBody().strength(-800))
+                    .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(150))
+                    .force('y', null)
+                    .force('r', null);
+            }
+
+            simulation.alpha(1).restart();
+        });
+
+        // Toggle link labels
+        function toggleLinkLabels() {
+            const checked = document.getElementById('showLinkLabels').checked;
+            linkLabel.classed('hidden', !checked);
+        }
+
+        // Export SVG
+        function exportGraph() {
+            const svgData = document.getElementById('graph-svg').outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'kbe-ontology-graph.svg';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

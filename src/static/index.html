@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KBE Demo Portal - Building Operations</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        header {
+            background: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        header h1 { font-size: 32px; margin-bottom: 10px; }
+        header p { opacity: 0.9; }
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+        .section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+        }
+        .section h2 {
+            color: #4e54c8;
+            margin-bottom: 15px;
+            font-size: 20px;
+            border-bottom: 2px solid #4e54c8;
+            padding-bottom: 10px;
+        }
+        .zones-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .zone-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .zone-card:hover {
+            border-color: #4e54c8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(78, 84, 200, 0.2);
+        }
+        .zone-card.selected {
+            border-color: #4e54c8;
+            background: #f0f2ff;
+        }
+        .zone-card h3 {
+            color: #333;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .zone-stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .zone-stat .label { color: #666; }
+        .zone-stat .value { font-weight: 600; color: #333; }
+        .action-form {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(78, 84, 200, 0.4);
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .audit-log {
+            max-height: 400px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .audit-entry {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-left: 3px solid #4e54c8;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .audit-entry.success { border-left-color: #28a745; }
+        .audit-entry.failed {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .audit-entry.completed { border-left-color: #28a745; }
+        .audit-entry .time {
+            font-size: 12px;
+            color: #666;
+        }
+        .audit-entry .action {
+            font-weight: 600;
+            color: #333;
+            margin: 5px 0;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-badge.pending { background: #ffc107; color: #000; }
+        .status-badge.validated { background: #17a2b8; color: white; }
+        .status-badge.executing { background: #007bff; color: white; }
+        .status-badge.completed { background: #28a745; color: white; }
+        .status-badge.failed { background: #dc3545; color: white; }
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .alert.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .alert.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏢 KBE Demo Portal</h1>
+            <p>Knowledge-Based Engineering Actions Framework - Proof of Concept</p>
+            <div style="margin-top: 15px;">
+                <a href="/static/graph.html" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 20px; border-radius: 20px; display: inline-block; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                    🕸️ View Knowledge Graph
+                </a>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <!-- Building State -->
+            <div class="section">
+                <h2>🏗️ Building State</h2>
+                <div id="buildingStats" style="margin-bottom: 15px;">
+                    <div class="zone-stat">
+                        <span class="label">Total Zones:</span>
+                        <span class="value" id="totalZones">5</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="label">Active Actions:</span>
+                        <span class="value" id="activeActions">0</span>
+                    </div>
+                </div>
+                <div class="zones-grid" id="zonesGrid"></div>
+            </div>
+
+            <!-- Actions -->
+            <div class="section">
+                <h2>⚡ KBE Actions</h2>
+                <div id="actionAlert"></div>
+
+                <div class="action-form">
+                    <div class="form-group">
+                        <label>Action Type</label>
+                        <select id="actionType">
+                            <option value="adjustSetpoint">Adjust Temperature Setpoint</option>
+                            <option value="loadShed">Load Shed - Reduce Lighting</option>
+                        </select>
+                    </div>
+
+                    <div id="adjustSetpointForm">
+                        <div class="form-group">
+                            <label>User / Role</label>
+                            <select id="userRole">
+                                <option value="operator:Operator">Operator (Basic Controls)</option>
+                                <option value="facility_manager:Facility Manager" selected>Facility Manager (All Controls)</option>
+                                <option value="energy_manager:Energy Manager">Energy Manager (Optimization)</option>
+                                <option value="contractor:Contractor">Contractor (Limited Access)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Zone Selection (Click tile or select)</label>
+                            <select id="zoneSelector">
+                                <option value="">-- Select a zone --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Selected Zone</label>
+                            <input type="text" id="selectedZone" readonly placeholder="Select a zone from tile or dropdown">
+                        </div>
+                        <div class="form-group">
+                            <label>New Setpoint (°F)</label>
+                            <input type="number" id="newSetpoint" min="60" max="80" step="0.5" value="72">
+                        </div>
+                        <div class="form-group">
+                            <label>Priority</label>
+                            <select id="priority">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="emergency">Emergency</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Reason</label>
+                            <input type="text" id="reason" placeholder="e.g., Occupant complaint">
+                        </div>
+                    </div>
+
+                    <div id="loadShedForm" style="display: none;">
+                        <div class="form-group">
+                            <label>Shed Level (1-5)</label>
+                            <input type="number" id="shedLevel" min="1" max="5" value="2">
+                            <small style="color: #666;">1=20%, 2=40%, 3=50%, 4=60%, 5=80% reduction</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Duration (minutes)</label>
+                            <input type="number" id="duration" min="1" max="240" value="30">
+                        </div>
+                    </div>
+
+                    <button class="btn" id="executeBtn">Execute Action</button>
+                </div>
+            </div>
+
+            <!-- Audit Trail -->
+            <div class="section" style="grid-column: 1 / -1;">
+                <h2>📜 Action Audit Trail</h2>
+                <div class="audit-log" id="auditLog"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let selectedZone = null;
+        let zones = [];
+
+        // Mock building data
+        const mockBuilding = {
+            zones: [
+                { id: 'Z001', name: 'Office', temp: 72.5, setpoint: 72.0, occupancy: 'occupied', power: 15.2 },
+                { id: 'Z002', name: 'Conference', temp: 71.8, setpoint: 72.0, occupancy: 'occupied', power: 8.5 },
+                { id: 'Z003', name: 'Common Areas', temp: 73.2, setpoint: 73.0, occupancy: 'occupied', power: 6.8 },
+                { id: 'Z004', name: 'Server Room', temp: 68.5, setpoint: 68.0, occupancy: 'unoccupied', power: 22.1 },
+                { id: 'Z005', name: 'Lobby', temp: 74.0, setpoint: 74.0, occupancy: 'occupied', power: 4.2 }
+            ]
+        };
+
+        // Initialize
+        function init() {
+            zones = mockBuilding.zones;
+            renderZones();
+            loadAuditLog();
+
+            document.getElementById('actionType').addEventListener('change', handleActionTypeChange);
+            document.getElementById('executeBtn').addEventListener('click', executeAction);
+            document.getElementById('zoneSelector').addEventListener('change', handleZoneSelectorChange);
+        }
+
+        function handleZoneSelectorChange(e) {
+            const zoneId = e.target.value;
+            if (zoneId) {
+                selectZone(zoneId);
+            }
+        }
+
+        function renderZones() {
+            const grid = document.getElementById('zonesGrid');
+            grid.innerHTML = zones.map(zone => `
+                <div class="zone-card ${selectedZone === zone.id ? 'selected' : ''}"
+                     onclick="selectZone('${zone.id}')">
+                    <h3>${zone.name}</h3>
+                    <div class="zone-stat">
+                        <span class="label">Current:</span>
+                        <span class="value">${zone.temp.toFixed(1)}°F</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="label">Setpoint:</span>
+                        <span class="value">${zone.setpoint.toFixed(1)}°F</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="label">Power:</span>
+                        <span class="value">${zone.power.toFixed(1)} kW</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="label">Status:</span>
+                        <span class="value">${zone.occupancy}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            // Update zone selector dropdown
+            const selector = document.getElementById('zoneSelector');
+            if (selector) {
+                selector.innerHTML = '<option value="">-- Select a zone --</option>' +
+                    zones.map(zone => `
+                        <option value="${zone.id}" ${selectedZone === zone.id ? 'selected' : ''}>
+                            ${zone.id} - ${zone.name} (${zone.temp.toFixed(1)}°F)
+                        </option>
+                    `).join('');
+            }
+        }
+
+        function selectZone(zoneId) {
+            console.log('Selecting zone:', zoneId);
+            selectedZone = zoneId;
+            const zone = zones.find(z => z.id === zoneId);
+            console.log('Found zone:', zone);
+
+            const selectedZoneInput = document.getElementById('selectedZone');
+            const setpointInput = document.getElementById('newSetpoint');
+
+            if (selectedZoneInput && zone) {
+                selectedZoneInput.value = `${zone.id} - ${zone.name}`;
+                console.log('Updated selectedZone input to:', selectedZoneInput.value);
+            }
+
+            if (setpointInput && zone) {
+                setpointInput.value = zone.setpoint;
+            }
+
+            renderZones();
+        }
+
+        function handleActionTypeChange(e) {
+            const adjustForm = document.getElementById('adjustSetpointForm');
+            const shedForm = document.getElementById('loadShedForm');
+
+            if (e.target.value === 'adjustSetpoint') {
+                adjustForm.style.display = 'block';
+                shedForm.style.display = 'none';
+            } else {
+                adjustForm.style.display = 'none';
+                shedForm.style.display = 'block';
+            }
+        }
+
+        async function executeAction() {
+            const actionType = document.getElementById('actionType').value;
+            const alertDiv = document.getElementById('actionAlert');
+
+            try {
+                // Get user/role info
+                const userRoleValue = document.getElementById('userRole').value;
+                const [userId, roleName] = userRoleValue.split(':');
+
+                let action, actionDefinition;
+
+                if (actionType === 'adjustSetpoint') {
+                    if (!selectedZone) {
+                        showAlert('Please select a zone', 'error');
+                        return;
+                    }
+
+                    const zone = zones.find(z => z.id === selectedZone);
+                    const newSetpoint = parseFloat(document.getElementById('newSetpoint').value);
+                    const priority = document.getElementById('priority').value;
+
+                    // Collect all validation violations
+                    const violations = [];
+
+                    // SHACL Validation: Absolute setpoint range constraint
+                    if (isNaN(newSetpoint) || newSetpoint < 60 || newSetpoint > 80) {
+                        violations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Setpoint range: 60-80°F (comfort)',
+                            violation: `Attempted setpoint ${newSetpoint}°F is outside allowed range`
+                        });
+                    }
+
+                    // SHACL Validation: Maximum delta constraint
+                    const setpointDelta = Math.abs(newSetpoint - zone.setpoint);
+                    if (setpointDelta > 15) {
+                        violations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Max change: 15°F for all users',
+                            violation: `Attempted change of ${setpointDelta.toFixed(1)}°F exceeds maximum`
+                        });
+                    }
+
+                    // ODRL Governance: Contractor emergency action restriction
+                    if (userId === 'contractor' && priority === 'emergency') {
+                        violations.push({
+                            type: 'ODRL Policy',
+                            rule: 'Contractors cannot execute emergency priority actions',
+                            violation: `User role '${roleName}' lacks permission for priority '${priority}'`
+                        });
+                    }
+
+                    // SHACL Validation: Role-based delta limit for operators
+                    if (setpointDelta > 5 && userId === 'operator') {
+                        violations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Max change: 5°F for operators',
+                            violation: `Operator attempted change of ${setpointDelta.toFixed(1)}°F (limit: 5°F)`
+                        });
+                    }
+
+                    // If violations exist, report all of them and log to audit trail
+                    if (violations.length > 0) {
+                        let errorMsg = `❌ Action Validation Failed (${violations.length} violation${violations.length > 1 ? 's' : ''}):\n\n`;
+                        violations.forEach((v, idx) => {
+                            errorMsg += `${idx + 1}. [${v.type}] ${v.rule}\n   → ${v.violation}\n\n`;
+                        });
+                        showAlert(errorMsg, 'error');
+
+                        // Log failed action to audit trail for security monitoring
+                        const failedActionDefinition = {
+                            id: `def-adjust-setpoint`,
+                            name: 'Adjust Temperature Setpoint',
+                            description: 'Modify zone temperature setpoint with validation',
+                            targetType: 'brick:Temperature_Setpoint',
+                            inputSchema: {
+                                zone_id: 'string',
+                                new_setpoint: 'number (60-80°F)',
+                                priority: 'enum[low,medium,high,emergency]',
+                                reason: 'string'
+                            },
+                            validationRules: [
+                                'Setpoint range: 60-80°F (comfort)',
+                                'Max change: 5°F for operators, 15°F for managers',
+                                'Server room protection: 15-25°C critical range',
+                                'Occupancy constraints enforced'
+                            ],
+                            requiredPermissions: ['zone:write', 'setpoint:modify'],
+                            sideEffects: ['hvac:mode_change', 'power:consumption_change', 'audit:log']
+                        };
+
+                        const failedExecution = {
+                            id: `exec-${Date.now()}`,
+                            actionDefinition: failedActionDefinition,
+                            status: 'failed',
+                            action_type: 'adjustSetpoint',
+                            zone_id: selectedZone,
+                            timestamp: new Date().toISOString(),
+                            user: {
+                                id: userId,
+                                role: roleName
+                            },
+                            parameters: {
+                                new_setpoint: newSetpoint,
+                                priority: priority,
+                                reason: document.getElementById('reason').value || 'Manual adjustment'
+                            },
+                            validationResults: {
+                                passed: false,
+                                rules_checked: failedActionDefinition.validationRules.length,
+                                permissions_verified: false,
+                                violations: violations
+                            },
+                            result: 'validation_failed',
+                            failureReason: violations.map(v => `[${v.type}] ${v.violation}`).join('; ')
+                        };
+
+                        addAuditEntry(failedExecution);
+                        return;
+                    }
+
+                    // Create ActionDefinition
+                    actionDefinition = {
+                        id: `def-adjust-setpoint`,
+                        name: 'Adjust Temperature Setpoint',
+                        description: 'Modify zone temperature setpoint with validation',
+                        targetType: 'brick:Temperature_Setpoint',
+                        inputSchema: {
+                            zone_id: 'string',
+                            new_setpoint: 'number (60-80°F)',
+                            priority: 'enum[low,medium,high,emergency]',
+                            reason: 'string'
+                        },
+                        validationRules: [
+                            'Setpoint range: 60-80°F (comfort)',
+                            'Max change: 5°F for operators, 15°F for managers',
+                            'Server room protection: 15-25°C critical range',
+                            'Occupancy constraints enforced'
+                        ],
+                        requiredPermissions: ['zone:write', 'setpoint:modify'],
+                        sideEffects: ['hvac:mode_change', 'power:consumption_change', 'audit:log']
+                    };
+
+                    action = {
+                        action_type: 'adjustSetpoint',
+                        zone_id: selectedZone,
+                        parameters: {
+                            new_setpoint: newSetpoint,
+                            priority: priority,
+                            reason: document.getElementById('reason').value || 'Manual adjustment'
+                        },
+                        user: {
+                            id: userId,
+                            role: roleName
+                        }
+                    };
+                } else {
+                    const shedLevel = parseInt(document.getElementById('shedLevel').value);
+                    const duration = parseInt(document.getElementById('duration').value);
+
+                    // Collect all validation violations for load shed
+                    const shedViolations = [];
+
+                    // SHACL Validation: Shed level range
+                    if (isNaN(shedLevel) || shedLevel < 1 || shedLevel > 5) {
+                        shedViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Shed level: 1-5',
+                            violation: `Attempted shed level ${shedLevel} is outside allowed range`
+                        });
+                    }
+
+                    // SHACL Validation: Duration constraints
+                    if (isNaN(duration) || duration < 1 || duration > 240) {
+                        shedViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Duration: Max 240 minutes',
+                            violation: `Attempted duration ${duration} minutes exceeds maximum`
+                        });
+                    } else if (shedLevel >= 4 && duration > 120) {
+                        shedViolations.push({
+                            type: 'SHACL Constraint',
+                            rule: 'Duration: Level 4-5 max 120 minutes',
+                            violation: `Level ${shedLevel} attempted with ${duration} minutes (max: 120)`
+                        });
+                    }
+
+                    // ODRL Governance: Energy manager required for level 4-5
+                    if (shedLevel >= 4 && userId !== 'energy_manager') {
+                        shedViolations.push({
+                            type: 'ODRL Policy',
+                            rule: 'Level 4-5: Energy Manager only',
+                            violation: `User role '${roleName}' lacks permission for shed level ${shedLevel}`
+                        });
+                    }
+
+                    // If violations exist, report and log
+                    if (shedViolations.length > 0) {
+                        let errorMsg = `❌ Action Validation Failed (${shedViolations.length} violation${shedViolations.length > 1 ? 's' : ''}):\n\n`;
+                        shedViolations.forEach((v, idx) => {
+                            errorMsg += `${idx + 1}. [${v.type}] ${v.rule}\n   → ${v.violation}\n\n`;
+                        });
+                        showAlert(errorMsg, 'error');
+
+                        // Log failed load shed action
+                        const failedShedDefinition = {
+                            id: `def-load-shed`,
+                            name: 'Load Shed - Reduce Lighting',
+                            description: 'Demand management through lighting reduction',
+                            targetType: 'brick:Lighting_System',
+                            inputSchema: {
+                                shed_level: 'integer (1-5)',
+                                duration: 'integer (1-240 minutes)',
+                                zones: 'array[zone_id]'
+                            },
+                            validationRules: [
+                                'Level 1-3: All roles, Level 4-5: Energy Manager only',
+                                'Duration: Max 240 minutes, Level 4-5 max 120 minutes',
+                                'Occupancy-aware: Min 40% illumination when occupied',
+                                'Server room exemption enforced'
+                            ],
+                            requiredPermissions: ['zone:write', 'lighting:control', 'demand:manage'],
+                            sideEffects: ['power:reduction', 'comfort:degradation', 'occupancy:notification']
+                        };
+
+                        const failedShedExecution = {
+                            id: `exec-${Date.now()}`,
+                            actionDefinition: failedShedDefinition,
+                            status: 'failed',
+                            action_type: 'loadShed',
+                            zone_id: 'Multiple',
+                            timestamp: new Date().toISOString(),
+                            user: {
+                                id: userId,
+                                role: roleName
+                            },
+                            parameters: {
+                                shed_level: shedLevel,
+                                duration: duration,
+                                zones: zones.filter(z => z.occupancy === 'occupied').map(z => z.id)
+                            },
+                            validationResults: {
+                                passed: false,
+                                rules_checked: failedShedDefinition.validationRules.length,
+                                permissions_verified: false,
+                                violations: shedViolations
+                            },
+                            result: 'validation_failed',
+                            failureReason: shedViolations.map(v => `[${v.type}] ${v.violation}`).join('; ')
+                        };
+
+                        addAuditEntry(failedShedExecution);
+                        return;
+                    }
+
+                    actionDefinition = {
+                        id: `def-load-shed`,
+                        name: 'Load Shed - Reduce Lighting',
+                        description: 'Demand management through lighting reduction',
+                        targetType: 'brick:Lighting_System',
+                        inputSchema: {
+                            shed_level: 'integer (1-5)',
+                            duration: 'integer (1-240 minutes)',
+                            zones: 'array[zone_id]'
+                        },
+                        validationRules: [
+                            'Level 1-3: All roles, Level 4-5: Energy Manager only',
+                            'Duration: Max 240 minutes, Level 4-5 max 120 minutes',
+                            'Occupancy-aware: Min 40% illumination when occupied',
+                            'Server room exemption enforced'
+                        ],
+                        requiredPermissions: ['zone:write', 'lighting:control', 'demand:manage'],
+                        sideEffects: ['power:reduction', 'comfort:degradation', 'occupancy:notification']
+                    };
+
+                    action = {
+                        action_type: 'loadShed',
+                        parameters: {
+                            shed_level: shedLevel,
+                            duration: parseInt(document.getElementById('duration').value),
+                            zones: zones.filter(z => z.occupancy === 'occupied').map(z => z.id)
+                        },
+                        user: {
+                            id: userId,
+                            role: roleName
+                        }
+                    };
+                }
+
+                // Simulate API call
+                console.log('Executing action:', action);
+                console.log('Action definition:', actionDefinition);
+
+                // Create ActionExecution with full KBE ontology
+                const actionExecution = {
+                    id: `exec-${Date.now()}`,
+                    actionDefinition: actionDefinition,
+                    status: 'validated',
+                    action_type: action.action_type,
+                    zone_id: action.zone_id || 'Multiple',
+                    timestamp: new Date().toISOString(),
+                    user: action.user,
+                    parameters: action.parameters,
+                    validationResults: {
+                        passed: true,
+                        rules_checked: actionDefinition.validationRules.length,
+                        permissions_verified: true
+                    },
+                    result: 'success'
+                };
+
+                // Transition to executing -> completed
+                setTimeout(() => {
+                    actionExecution.status = 'executing';
+                    console.log('Action status: executing');
+                }, 100);
+
+                setTimeout(() => {
+                    actionExecution.status = 'completed';
+                    addAuditEntry(actionExecution);
+                    showAlert('✅ Action executed successfully! Check audit trail for details.', 'success');
+
+                    // Update zone state for demo
+                    if (actionType === 'adjustSetpoint' && selectedZone) {
+                        const zone = zones.find(z => z.id === selectedZone);
+                        if (zone) {
+                            zone.setpoint = action.parameters.new_setpoint;
+                            renderZones();
+                        }
+                    }
+                }, 500);
+
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        function showAlert(message, type) {
+            const alertDiv = document.getElementById('actionAlert');
+            const alertId = `alert-${Date.now()}`;
+            alertDiv.innerHTML = `
+                <div class="alert ${type}" id="${alertId}">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1; white-space: pre-wrap;">${message}</div>
+                        <button onclick="document.getElementById('${alertId}').remove()"
+                                style="background: none; border: none; color: inherit; cursor: pointer; font-size: 20px; font-weight: bold; margin-left: 10px; opacity: 0.7; padding: 0 5px;">
+                            ×
+                        </button>
+                    </div>
+                </div>
+            `;
+            // Longer timeout for error messages (15 seconds), shorter for success (5 seconds)
+            const timeout = type === 'error' ? 15000 : 5000;
+            setTimeout(() => {
+                const el = document.getElementById(alertId);
+                if (el) el.remove();
+            }, timeout);
+        }
+
+        function addAuditEntry(entry) {
+            const auditLog = document.getElementById('auditLog');
+            const time = new Date(entry.timestamp).toLocaleTimeString();
+
+            // Build detailed audit entry showing KBE ontology
+            const actionDef = entry.actionDefinition || {};
+            const validation = entry.validationResults || {};
+            const user = entry.user || {};
+
+            const entryHtml = `
+                <div class="audit-entry ${entry.status}" style="cursor: pointer;" onclick="toggleAuditDetails('${entry.id}')">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <div class="time">${time}</div>
+                            <div class="action"><strong>${actionDef.name || entry.action_type}</strong> - Zone ${entry.zone_id}</div>
+                            <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                                User: ${user.role || 'Unknown'} | ID: ${entry.id}
+                            </div>
+                        </div>
+                        <span class="status-badge ${entry.status}">${entry.status.toUpperCase()}</span>
+                    </div>
+                    <div id="details-${entry.id}" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
+                        <div style="font-size: 13px;">
+                            <strong>📋 ActionDefinition:</strong>
+                            <div style="margin-left: 20px; margin-top: 4px;">
+                                <div>• ID: ${actionDef.id || 'N/A'}</div>
+                                <div>• Target Type: ${actionDef.targetType || 'N/A'}</div>
+                                <div>• Description: ${actionDef.description || 'N/A'}</div>
+                            </div>
+
+                            <strong style="margin-top: 8px; display: block;">${validation.passed === false ? '❌' : '✅'} Validation Rules (${validation.rules_checked || 0} checked):</strong>
+                            <div style="margin-left: 20px; margin-top: 4px;">
+                                ${(actionDef.validationRules || []).map(rule => `<div>• ${rule}</div>`).join('')}
+                            </div>
+
+                            ${validation.violations && validation.violations.length > 0 ? `
+                            <strong style="margin-top: 8px; display: block; color: #dc3545;">⚠️ Violations Detected (${validation.violations.length}):</strong>
+                            <div style="margin-left: 20px; margin-top: 4px; color: #dc3545;">
+                                ${validation.violations.map((v, idx) => `
+                                    <div style="margin-bottom: 6px; padding: 6px; background: #fff5f5; border-left: 3px solid #dc3545; border-radius: 3px;">
+                                        <strong>${idx + 1}. [${v.type}]</strong> ${v.rule}
+                                        <div style="margin-top: 2px; font-size: 11px;">→ ${v.violation}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ` : ''}
+
+                            <strong style="margin-top: 8px; display: block;">🔐 Governance (ODRL):</strong>
+                            <div style="margin-left: 20px; margin-top: 4px;">
+                                <div>• Permissions: ${(actionDef.requiredPermissions || []).join(', ')}</div>
+                                <div>• Verified: ${validation.permissions_verified ? '✅ Yes' : '❌ No'}</div>
+                            </div>
+
+                            <strong style="margin-top: 8px; display: block;">⚡ Side Effects:</strong>
+                            <div style="margin-left: 20px; margin-top: 4px;">
+                                ${(actionDef.sideEffects || []).map(effect => `<div>• ${effect}</div>`).join('')}
+                            </div>
+
+                            <strong style="margin-top: 8px; display: block;">📊 Parameters:</strong>
+                            <div style="margin-left: 20px; margin-top: 4px;">
+                                <pre style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-size: 11px;">${JSON.stringify(entry.parameters || {}, null, 2)}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            auditLog.insertAdjacentHTML('afterbegin', entryHtml);
+
+            // Store in localStorage
+            const history = JSON.parse(localStorage.getItem('auditHistory') || '[]');
+            history.unshift(entry);
+            localStorage.setItem('auditHistory', JSON.stringify(history.slice(0, 50)));
+        }
+
+        function toggleAuditDetails(entryId) {
+            const details = document.getElementById(`details-${entryId}`);
+            if (details) {
+                details.style.display = details.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function loadAuditLog() {
+            const history = JSON.parse(localStorage.getItem('auditHistory') || '[]');
+            history.forEach(entry => {
+                const time = new Date(entry.timestamp).toLocaleTimeString();
+                const auditLog = document.getElementById('auditLog');
+                auditLog.insertAdjacentHTML('beforeend', `
+                    <div class="audit-entry ${entry.status}">
+                        <div class="time">${time}</div>
+                        <div class="action">${entry.action_type} - Zone ${entry.zone_id}</div>
+                        <span class="status-badge ${entry.status}">${entry.status.toUpperCase()}</span>
+                    </div>
+                `);
+            });
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
