@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  kbe-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kbe-demo-portal
+    ports:
+      - "8008:8008"
+    environment:
+      # Application settings
+      - ENV=production
+      - LOG_LEVEL=info
+      # Add any other environment variables here
+    volumes:
+      # Mount static files for development (optional)
+      # - ./src/static:/app/src/static:ro
+      # Mount logs directory (optional)
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - kbe-network
+
+networks:
+  kbe-network:
+    driver: bridge
+
+volumes:
+  logs:
+    driver: local
